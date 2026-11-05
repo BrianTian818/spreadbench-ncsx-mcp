@@ -16,25 +16,25 @@ const NCSX_IS = 'NCSX-IS';
 const T = [
   {
     name: 'ncsx_latest',
-    description: 'Latest NCSX-IS reading: issuance spread (coupon minus the Treasury yield of matching tenor on the pricing date), weighted by face value, plus the secured and unsecured sub-indices, constituent/issuer counts, notional, as-of date, methodology version, DOI and data_status. This is a point-in-time issuance spread, not a traded level: there is no daily change. Read data_status before quoting — "real_issuance" means observed public issuance data; anything marked "retired_seed" or "seed" is a demo series and must not be quoted.',
+    description: 'The one number to quote — use this first for "what is NCSX-IS / what is the spread right now". Returns a compact record: headline issuance spread (coupon minus the Treasury yield of matching tenor on the pricing date, weighted by face value), the secured and unsecured sub-indices, constituent/issuer counts, notional, as-of date, methodology version, DOI and data_status. This is a point-in-time issuance spread, not a traded level: there is no daily change. Read data_status before quoting — "real_issuance" means observed public issuance data; anything marked "retired_seed" or "seed" is a demo series and must not be quoted.',
     schema: { type: 'object', properties: {}, additionalProperties: false },
     path: () => '/api/v1/latest.json',
   },
   {
     name: 'ncsx_index',
-    description: 'Full NCSX-IS index definition and levels: overall spread plus secured / unsecured sub-indices with their notionals and constituent counts, coverage notes and data_status.',
+    description: 'The full index definition, not a single number — use when the question is structural ("how is NCSX-IS built", "show all tiers") rather than "what is the level". Returns the NCSX-IS / secured / unsecured tiers side by side with each tier\'s notional and constituent count, plus index-level coverage notes and data_status. For a quick headline reading use ncsx_latest instead.',
     schema: { type: 'object', properties: {}, additionalProperties: false },
     path: () => '/api/v1/real/index.json',
   },
   {
     name: 'ncsx_constituents',
-    description: 'List every constituent bond behind NCSX-IS: issuer, ticker, coupon, maturity, size, seniority, pricing date, tenor, the matched Treasury yield on that date, and the resulting issuance spread in bp.',
+    description: 'The whole universe in one response — all 13 constituent bonds, no filter: issuer, ticker, coupon, maturity, size, seniority, pricing date, tenor, the matched Treasury yield on that date, and the resulting issuance spread in bp. Use it to list the index or to compute weights; if the user named one issuer, use ncsx_bond instead so you do not pull 13 rows to answer about one.',
     schema: { type: 'object', properties: {}, additionalProperties: false },
     path: () => '/api/v1/real/universe.json',
   },
   {
     name: 'ncsx_bond',
-    description: 'Look up individual constituent bonds of NCSX-IS by free text against issuer name, ticker or note (e.g. "CoreWeave", "GLXY", "Helios"). Constituents are identified by issuer + coupon + maturity; they do NOT carry CUSIPs, so do not query by CUSIP.',
+    description: 'Filtered lookup for one issuer, ticker or note keyword (e.g. "CoreWeave", "GLXY", "Helios", "2031") — returns only the matching constituent bonds, not the whole universe. Constituents are identified by issuer + coupon + maturity; they do NOT carry CUSIPs, so never query by CUSIP. Use ncsx_constituents when you need every bond.',
     schema: {
       type: 'object',
       properties: {
@@ -68,6 +68,12 @@ const T = [
     schema: { type: 'object', properties: {}, additionalProperties: false },
     path: () => '/api/v1/methodology.json',
   },
+];
+
+/* 三个 v0.1.1 的旧工具名：不再出现在 tools/list 里（目录站与 agent 只会看到 8 个真实工具），
+ * 但保留调用解析 —— 缓存过旧列表的客户端仍能拿到一段结构化下线说明，而不是 "Unknown tool"。
+ * 2026-11-05 Glama 的质量评分明确指出「三个 deprecated 存根让工具面看起来比实际松散」，据此移出列表。 */
+const LEGACY = [
   {
     name: 'ncsx_levels',
     description: 'DEPRECATED — returns a structured retirement notice, not data. The old 90-trading-day daily level series (composite / hy / ig) came from a demo series that has been withdrawn. Use ncsx_latest or ncsx_index instead.',
@@ -95,8 +101,7 @@ const T = [
 ];
 
 /* 所有工具都是只读取数：显式声明 annotations，客户端的权限提示才不会误报，
- * 目录站（如 brick.blue）也只会挑 readOnlyHint 的工具去试调，否则一律标成 access:"unknown"。
- * 三个 deprecated 工具同样是只读（只返回一段下线说明），所以一并标 true。 */
+ * 目录站（如 brick.blue）也只会挑 readOnlyHint 的工具去试调，否则一律标成 access:"unknown"。 */
 const ANNOTATIONS = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -104,19 +109,21 @@ const ANNOTATIONS = {
   openWorldHint: false,
 };
 
-const TOOLS = T.map((t) => ({
+const decorate = (t) => ({
   name: t.name,
   description: t.description,
   inputSchema: t.schema,
   annotations: Object.assign({ title: t.name.replace(/_/g, ' ') }, ANNOTATIONS),
-}));
+});
+
+const TOOLS = T.map(decorate);
 const BY_NAME = {};
-for (const t of T) BY_NAME[t.name] = t;
+for (const t of T.concat(LEGACY)) BY_NAME[t.name] = t;
 
 const SERVER_INFO = {
   protocolVersion: '2025-03-26',
   capabilities: { tools: {} },
-  serverInfo: { name: 'ncsx', version: '0.2.0' },
+  serverInfo: { name: 'ncsx', version: '0.2.1' },
   instructions:
     'SpreadBench publishes ' + NCSX_IS + ', an issuance-spread benchmark for AI-infrastructure (Neocloud) bonds: ' +
     'each constituent coupon minus the US Treasury yield of matching tenor on its pricing date, weighted by face value. ' +
