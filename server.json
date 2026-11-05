@@ -1,0 +1,14 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.spreadbench/ncsx",
+  "title": "SpreadBench NCSX-IS — AI Infrastructure Bond Issuance Spread Index",
+  "description": "AI-infrastructure bond issuance-spread index (NCSX-IS): secured / unsecured tiers, 13 bonds, free.",
+  "version": "0.2.0",
+  "websiteUrl": "https://spreadbench.com",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://spreadbench.com/mcp"
+    }
+  ]
+}
