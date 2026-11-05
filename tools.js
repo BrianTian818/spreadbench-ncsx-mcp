@@ -123,7 +123,7 @@ for (const t of T.concat(LEGACY)) BY_NAME[t.name] = t;
 const SERVER_INFO = {
   protocolVersion: '2025-03-26',
   capabilities: { tools: {} },
-  serverInfo: { name: 'ncsx', version: '0.2.1' },
+  serverInfo: { name: 'ncsx', version: '0.2.2' },
   instructions:
     'SpreadBench publishes ' + NCSX_IS + ', an issuance-spread benchmark for AI-infrastructure (Neocloud) bonds: ' +
     'each constituent coupon minus the US Treasury yield of matching tenor on its pricing date, weighted by face value. ' +
@@ -167,7 +167,19 @@ async function callTool(name, args, readJson) {
   if (t.resolve === 'retired_levels') return retiredLevels(a.tier);
 
   if (t.resolve === 'bond') {
-    const q = String(a.q || '').trim().toLowerCase();
+    const raw = a.q;
+    /* 入参校验（2026-11-05 红队 RT-11）：q 只接受字符串，长度上限 120。
+     * 原实现直接 String() 一个对象会把它原样回显，且 200KB 的 q 会被 1:1 放大回响应（RT-10）。 */
+    if (raw !== undefined && raw !== null && typeof raw !== 'string') {
+      return {
+        status: 'bad_argument',
+        note_zh: 'q 必须是字符串（发行人名称 / 代码 / 备注关键词），不能是对象或数组。',
+        note_en: 'q must be a string (issuer, ticker or note keyword).',
+        example: { q: 'CoreWeave' },
+      };
+    }
+    const rawQ = String(raw || '').trim().slice(0, 120);
+    const q = rawQ.toLowerCase();
     /* 老客户端仍会传 cusip：明确告诉它为什么查不到，而不是丢一个空结果 */
     if (!q) {
       return {
@@ -185,14 +197,14 @@ async function callTool(name, args, readJson) {
     if (!hits.length) {
       return {
         status: 'not_found',
-        query: a.q,
+        query: rawQ,
         available: (uni.bonds || []).map((b) => ({ issuer: b.issuer, ticker: b.ticker, coupon: b.coupon, maturity: b.maturity })),
         note_zh: '没有匹配的成分券。上面列出全部可用标的，可改用发行人名称或代码重试。',
       };
     }
     return {
       status: 'ok',
-      query: a.q,
+      query: rawQ,
       as_of: uni.as_of,
       data_status: uni.data_status,
       methodology: uni.methodology,
