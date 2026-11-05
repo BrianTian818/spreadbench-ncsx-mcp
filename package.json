@@ -1,0 +1,36 @@
+{
+  "name": "@ncsx/mcp",
+  "version": "0.2.0",
+  "description": "Official MCP server for SpreadBench NCSX-IS — an issuance-spread benchmark for AI-infrastructure (Neocloud) bonds. Free public JSON endpoints; every payload carries data_status.",
+  "bin": {
+    "ncsx-mcp": "index.js"
+  },
+  "main": "index.js",
+  "files": [
+    "index.js",
+    "tools.js",
+    "server.json",
+    "README.md"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "credit-spread",
+    "bonds",
+    "fixed-income",
+    "ai-infrastructure",
+    "neocloud",
+    "financial-data",
+    "spreadbench",
+    "ncsx"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BrianTian818/spreadbench-ncsx-mcp"
+  },
+  "homepage": "https://spreadbench.com/api.html",
+  "engines": {
+    "node": ">=18"
+  }
+}
