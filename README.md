@@ -30,7 +30,7 @@ Free, no API key, no signup.
 ```bash
 npm install -g github:BrianTian818/spreadbench-ncsx-mcp
 # or, without npm registry:
-npm install -g https://spreadbench.com/download/ncsx-mcp-0.2.0.tgz
+npm install -g https://spreadbench.com/download/ncsx-mcp-0.2.1.tgz
 ```
 
 ```json
@@ -47,19 +47,20 @@ Both transports share one tool definition file (`tools.js`), so they never drift
 
 ## Tools
 
+Eight read-only tools, all keyless. Every tool declares `readOnlyHint: true` / `destructiveHint: false`, so clients do not prompt for write permission.
+
 | Tool | Returns |
 |---|---|
-| `ncsx_latest` | Latest NCSX-IS reading, secured / unsecured sub-indices, constituent and issuer counts, notional, as-of date, methodology version, DOI, `data_status` |
-| `ncsx_index` | Full index definition, sub-index notionals, coverage notes |
-| `ncsx_constituents` | All 13 constituent bonds: issuer, ticker, coupon, maturity, size, seniority, pricing date, matched Treasury, issuance spread in bp |
-| `ncsx_bond` | Look up individual bonds by issuer / ticker / note keyword |
+| `ncsx_latest` | **Start here for "what is the level".** Latest NCSX-IS reading, secured / unsecured sub-indices, constituent and issuer counts, notional, as-of date, methodology version, DOI, `data_status` |
+| `ncsx_index` | **Structural, not a single number.** Full index definition, sub-index notionals, coverage notes |
+| `ncsx_constituents` | **The whole universe, no filter.** All 13 constituent bonds: issuer, ticker, coupon, maturity, size, seniority, pricing date, matched Treasury, issuance spread in bp |
+| `ncsx_bond` | **Filtered lookup for one issuer** — matches issuer / ticker / note keyword and returns only matching bonds |
 | `ncsx_curve` | The Treasury par-yield curve used on the pricing date (14 tenors, linear interpolation, no extrapolation) plus recent history |
 | `ncsx_sector` | US high-yield / investment-grade OAS reference series for comparison |
 | `ncsx_marks` | Second, independent layer: quarterly fair-value marks from SEC Form N-PORT filings, converted to spread |
 | `ncsx_methodology` | Methodology version, DOI, license, data sources and their licensing status, full formula chain |
-| `ncsx_levels` | **Deprecated** — returns a structured retirement notice (the old demo series was withdrawn) |
-| `ncsx_attribution` | **Deprecated** — an issuance spread has no daily move to attribute |
-| `ncsx_weekly` | **Deprecated** — structured snapshot being rebuilt; see <https://spreadbench.com/feed.xml> |
+
+Three names from the demo-era server — `ncsx_levels`, `ncsx_attribution`, `ncsx_weekly` — are **not listed** any more, but still answer if an old client calls them: they return a structured retirement notice rather than an error.
 
 ---
 
@@ -95,7 +96,11 @@ If a tool returns `status: "retired"`, the endpoint was withdrawn — read the `
 
 ## Notes on naming
 
-Older versions of this server exposed `Composite` / `HY` / `IG` tiers and 90-day daily series. Those came from a demo dataset and were withdrawn on 2026-11-04 in favour of the issuance-spread methodology (`v0.2.0-real`). The three deprecated tools above remain callable only so that old clients receive an explicit notice instead of an error.
+Older versions of this server exposed `Composite` / `HY` / `IG` tiers and 90-day daily series. Those came from a demo dataset and were withdrawn on 2026-11-04 in favour of the issuance-spread methodology (`v0.2.0-real`). The three retired names listed above remain callable only so that old clients receive an explicit notice instead of an error; they are hidden from `tools/list`.
+
+## Directory listings
+
+This server is listed in the official [MCP Registry](https://registry.modelcontextprotocol.io) as `com.spreadbench/ncsx`, and is indexed by Glama (`A` tier) and brick.blue. `glama.json` in this repo claims the listing for its maintainer.
 
 ## License
 
