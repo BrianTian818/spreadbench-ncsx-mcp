@@ -94,7 +94,22 @@ const T = [
   },
 ];
 
-const TOOLS = T.map((t) => ({ name: t.name, description: t.description, inputSchema: t.schema }));
+/* 所有工具都是只读取数：显式声明 annotations，客户端的权限提示才不会误报，
+ * 目录站（如 brick.blue）也只会挑 readOnlyHint 的工具去试调，否则一律标成 access:"unknown"。
+ * 三个 deprecated 工具同样是只读（只返回一段下线说明），所以一并标 true。 */
+const ANNOTATIONS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const TOOLS = T.map((t) => ({
+  name: t.name,
+  description: t.description,
+  inputSchema: t.schema,
+  annotations: Object.assign({ title: t.name.replace(/_/g, ' ') }, ANNOTATIONS),
+}));
 const BY_NAME = {};
 for (const t of T) BY_NAME[t.name] = t;
 
