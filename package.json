@@ -1,6 +1,6 @@
 {
   "name": "@ncsx/mcp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Official MCP server for SpreadBench NCSX-IS — an issuance-spread benchmark for AI-infrastructure (Neocloud) bonds. Free public JSON endpoints; every payload carries data_status.",
   "bin": {
     "ncsx-mcp": "index.js"
