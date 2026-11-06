@@ -121,7 +121,7 @@ const T = [
   },
   {
     name: 'ncsx_ruler',
-    description: 'Reverse pricing — the question every other tool cannot answer: given a coupon and a tenor, where would a new AI-infrastructure bond land? Returns the matched Treasury yield (linear interpolation between the two adjacent curve tenors, never extrapolated), the resulting issuance spread in bp using the same formula as every constituent ((coupon - UST) x 100), how it compares with the index level and with the same-structure tier, its rank among the 13 constituents, and — if you pass a size — the index level after adding it (face-value weighted: the same arithmetic as the pull_bp attribution in ncsx_events). Nothing is stored: it is recomputed on every call from the current curve, universe and index, so it can never go stale. Use it for "is 9.5% for 5 years tight or wide for this market", "what does an 8% coupon imply", "what happens to NCSX-IS if another $2bn prices at this spread". Facts and arithmetic only: it does not recommend a coupon and issues no rating or investment advice.',
+    description: 'Reverse pricing — the question every other tool cannot answer: given a coupon and a tenor, where would a new AI-infrastructure bond land? Returns the matched Treasury yield (linear interpolation between the two adjacent curve tenors, never extrapolated), the resulting issuance spread in bp using the same formula as every constituent ((coupon - UST) x 100), how it compares with the index level and with the same-structure tier, its rank among the 13 constituents, and — if you pass a size — the index level after adding it (face-value weighted: the same arithmetic as the pull_bp attribution in ncsx_events). Pass issuer to also get that issuer\'s own bonds already in the index (coupon, tenor, spread at pricing, gap to the hypothetical new bond) — the first thing an underwriter checks is what the same name paid last time. Nothing is stored: it is recomputed on every call from the current curve, universe and index, so it can never go stale. Use it for "is 9.5% for 5 years tight or wide for this market", "what does an 8% coupon imply", "what happens to NCSX-IS if another $2bn prices at this spread", "how would a new CoreWeave bond compare with its existing stack". Facts and arithmetic only: it does not recommend a coupon and issues no rating or investment advice.',
     schema: {
       type: 'object',
       properties: {
@@ -129,6 +129,7 @@ const T = [
         tenor_years: { type: 'number', description: 'Years to maturity — 5, 5.5, 0.5 (6 months). Must fall inside the published curve range (1M-30Y); out-of-range tenors are refused, never extrapolated.' },
         size_mm: { type: 'number', description: 'Optional: new-issue size in $ millions. Omit or 0 to skip the index-impact calculation.' },
         seniority: { type: 'string', enum: ['secured', 'unsecured'], description: 'Optional: structure of the new bond, default "secured". Drives which sub-index the comparison uses (secured 391.2bp / unsecured 540.1bp at the current version).' },
+        issuer: { type: 'string', description: 'Optional: issuer name or ticker ("CoreWeave", "CRWV"), case-insensitive substring — same matching rule as ncsx_bond. Returns that issuer\'s existing index bonds as a pricing history for the new bond to be compared against. Omit to skip.' },
       },
       required: ['coupon_pct', 'tenor_years'],
       additionalProperties: false,
@@ -196,7 +197,7 @@ for (const t of T.concat(LEGACY)) BY_NAME[t.name] = t;
 const SERVER_INFO = {
   protocolVersion: '2025-03-26',
   capabilities: { tools: {} },
-  serverInfo: { name: 'ncsx', version: '0.2.8' },
+  serverInfo: { name: 'ncsx', version: '0.2.9' },
   instructions:
     'SpreadBench publishes ' + NCSX_IS + ', an issuance-spread benchmark for AI-infrastructure (Neocloud) bonds: ' +
     'each constituent coupon minus the US Treasury yield of matching tenor on its pricing date, weighted by face value. ' +
@@ -652,6 +653,41 @@ async function callTool(name, args, readJson) {
       spread_bp: r1(spreadExact), seniority: tierLabel, is_new: true,
     }]).sort((x, y) => x.spread_bp - y.spread_bp || (x.is_new ? 1 : -1));
 
+    /* 发行人历史定价（2026-11-06 v0.2.9）：同一个名字上次发的是什么价——
+     * 承销员核对一只新券的第一件事。匹配规则与 ncsx_bond 一致（issuer/ticker 不区分大小写子串）。 */
+    let issuerHistory = null;
+    if (a.issuer !== undefined && a.issuer !== null && String(a.issuer).trim() !== '') {
+      const q = String(a.issuer).toLowerCase();
+      const hits = bonds.filter((b) =>
+        String(b.issuer || '').toLowerCase().includes(q) || String(b.ticker || '').toLowerCase().includes(q));
+      const allIssuers = Array.from(new Set(bonds.map((b) => b.issuer)));
+      if (!hits.length) {
+        issuerHistory = {
+          matched: false,
+          requested: a.issuer,
+          available_issuers: allIssuers,
+          note: 'No constituent matches this name, so there is no pricing history to compare against. The new bond is still measured against the index and the 13 constituents.',
+        };
+      } else {
+        const matchedIssuers = Array.from(new Set(hits.map((b) => b.issuer)));
+        const histNotional = hits.reduce((s, b) => s + b.size_mm, 0);
+        issuerHistory = {
+          matched: true,
+          issuer: matchedIssuers.length === 1 ? matchedIssuers[0] : null,
+          issuers: matchedIssuers,
+          bonds: hits.map((b) => ({
+            ticker: b.ticker, coupon_pct: b.coupon, maturity: b.maturity, tenor_years: b.tenor_years,
+            size_mm: b.size_mm, seniority: b.sen, priced: b.pricing,
+            spread_bp: b.issue_spread_bp, delta_vs_new_bp: r1(b.issue_spread_bp - spreadExact),
+          })),
+          weighted_spread_bp: matchedIssuers.length === 1 ? r1(hits.reduce((s, b) => s + b.size_mm * b.issue_spread_bp, 0) / histNotional) : null,
+          note: matchedIssuers.length === 1
+            ? 'Spreads are point-in-time at each bond\'s own pricing date, measured against the Treasury curve of that date — not today\'s curve. delta_vs_new_bp compares the hypothetical new bond (today\'s curve) with each existing bond\'s pricing spread.'
+            : 'The keyword matched more than one issuer, so no single weighted level is shown; read the per-bond rows instead.',
+        };
+      }
+    }
+
     /* 指数水位自洽核对：13 券面值加权应等于发布值（derived_check 第 ⑥ 类同一口径） */
     const idxNotional = bonds.reduce((s, b) => s + b.size_mm, 0);
     const idxRecomputed = idxNotional > 0
@@ -719,6 +755,7 @@ async function callTool(name, args, readJson) {
           : 'No existing constituent sits within 0.05bp of this spread.',
       },
       index_impact: impact,
+      issuer_history: issuerHistory,
       index_impact_note: impact
         ? 'Same face-value weighting as the index itself, and the same arithmetic as the pull_bp attribution in ncsx_events: a positive delta_bp means this bond would pull the index wider.'
         : 'No size passed (or size 0), so the index-impact calculation was skipped. Pass size_mm to see the new level.',
