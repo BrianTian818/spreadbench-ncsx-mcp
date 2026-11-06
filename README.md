@@ -30,7 +30,7 @@ Free, no API key, no signup.
 ```bash
 npm install -g github:BrianTian818/spreadbench-ncsx-mcp
 # or, without npm registry:
-npm install -g https://spreadbench.com/download/ncsx-mcp-0.2.8.tgz
+npm install -g https://spreadbench.com/download/ncsx-mcp-0.2.9.tgz
 ```
 
 ```json
@@ -63,7 +63,7 @@ Fourteen read-only tools, all keyless. Every tool declares `readOnlyHint: true` 
 | `ncsx_stories` | Citable data stories recomputed live, each with headline numbers, bilingual page and a 1200x630 share card |
 | `ncsx_facts` | 16 quotable numbers, each with `value`, `unit`, `as_of`, a human-readable `calc` and a `source`; filter by `id` or `q` |
 | `ncsx_events` | **History as an event replay.** 13 pricing events in order, level after each, change in bp and per-bond pull attribution (`pull_bp`), so pulls sum to the event delta; filter by `since` or `ticker` |
-| `ncsx_ruler` | **Reverse pricing.** Given a coupon and a tenor: interpolated Treasury (never extrapolated), issuance spread, rank among the 13, gap to the index level and to the same-structure tier, and the index level after adding the bond at a given size. Recomputed on every call — nothing is stored |
+| `ncsx_ruler` | **Reverse pricing.** Given a coupon and a tenor: interpolated Treasury (never extrapolated), issuance spread, rank among the 13, gap to the index level and to the same-structure tier, and the index level after adding the bond at a given size. Pass `issuer` to get that issuer's own bonds already in the index as a pricing history. Recomputed on every call — nothing is stored |
 | `ncsx_methodology` | Methodology version, DOI, license, data sources and their licensing status, full formula chain |
 
 Three names from the demo-era server — `ncsx_levels`, `ncsx_attribution`, `ncsx_weekly` — are **not listed** any more, but still answer if an old client calls them: they return a structured retirement notice rather than an error.
