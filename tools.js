@@ -121,7 +121,7 @@ const T = [
   },
   {
     name: 'ncsx_ruler',
-    description: 'Reverse pricing — the question every other tool cannot answer: given a coupon and a tenor, where would a new AI-infrastructure bond land? Returns the matched Treasury yield (linear interpolation between the two adjacent curve tenors, never extrapolated), the resulting issuance spread in bp using the same formula as every constituent ((coupon - UST) x 100), how it compares with the index level and with the same-structure tier, its rank among the 13 constituents, and — if you pass a size — the index level after adding it (face-value weighted: the same arithmetic as the pull_bp attribution in ncsx_events). Pass issuer to also get that issuer\'s own bonds already in the index (coupon, tenor, spread at pricing, gap to the hypothetical new bond) — the first thing an underwriter checks is what the same name paid last time. Nothing is stored: it is recomputed on every call from the current curve, universe and index, so it can never go stale. Use it for "is 9.5% for 5 years tight or wide for this market", "what does an 8% coupon imply", "what happens to NCSX-IS if another $2bn prices at this spread", "how would a new CoreWeave bond compare with its existing stack". Facts and arithmetic only: it does not recommend a coupon and issues no rating or investment advice.',
+    description: 'Reverse pricing — the question every other tool cannot answer: given a coupon and a tenor, where would a new AI-infrastructure bond land? Returns the matched Treasury yield (linear interpolation between the two adjacent curve tenors, never extrapolated), the resulting issuance spread in bp using the same formula as every constituent ((coupon - UST) x 100), how it compares with the index level and with the same-structure tier, its rank among the 13 constituents, a like-for-like comparable set (same structure, tenor within ±1y, with median / weighted / rank), and — if you pass a size — the index level after adding it (face-value weighted: the same arithmetic as the pull_bp attribution in ncsx_events). Pass issuer to also get that issuer\'s own bonds already in the index (coupon, tenor, spread at pricing, gap to the hypothetical new bond) — the first thing an underwriter checks is what the same name paid last time. Nothing is stored: it is recomputed on every call from the current curve, universe and index, so it can never go stale. Use it for "is 9.5% for 5 years tight or wide for this market", "what does an 8% coupon imply", "what happens to NCSX-IS if another $2bn prices at this spread", "how would a new CoreWeave bond compare with its existing stack". Facts and arithmetic only: it does not recommend a coupon and issues no rating or investment advice.',
     schema: {
       type: 'object',
       properties: {
@@ -129,6 +129,7 @@ const T = [
         tenor_years: { type: 'number', description: 'Years to maturity — 5, 5.5, 0.5 (6 months). Must fall inside the published curve range (1M-30Y); out-of-range tenors are refused, never extrapolated.' },
         size_mm: { type: 'number', description: 'Optional: new-issue size in $ millions. Omit or 0 to skip the index-impact calculation.' },
         seniority: { type: 'string', enum: ['secured', 'unsecured'], description: 'Optional: structure of the new bond, default "secured". Drives which sub-index the comparison uses (secured 391.2bp / unsecured 540.1bp at the current version).' },
+        peer_window_years: { type: 'number', description: 'Optional: half-width of the tenor window used to build the comparable set (same structure, tenor within ± this many years). Default 1, max 10. Note that all current constituents matured in 5.0-6.1 years, so a tenor far from 5y will fall back to the nearest existing tenor, flagged in peer_set.fallback.' },
         issuer: { type: 'string', description: 'Optional: issuer name or ticker ("CoreWeave", "CRWV"), case-insensitive substring — same matching rule as ncsx_bond. Returns that issuer\'s existing index bonds as a pricing history for the new bond to be compared against. Omit to skip.' },
       },
       required: ['coupon_pct', 'tenor_years'],
@@ -197,7 +198,7 @@ for (const t of T.concat(LEGACY)) BY_NAME[t.name] = t;
 const SERVER_INFO = {
   protocolVersion: '2025-03-26',
   capabilities: { tools: {} },
-  serverInfo: { name: 'ncsx', version: '0.2.9' },
+  serverInfo: { name: 'ncsx', version: '0.3.0' },
   instructions:
     'SpreadBench publishes ' + NCSX_IS + ', an issuance-spread benchmark for AI-infrastructure (Neocloud) bonds: ' +
     'each constituent coupon minus the US Treasury yield of matching tenor on its pricing date, weighted by face value. ' +
@@ -653,9 +654,76 @@ async function callTool(name, args, readJson) {
       spread_bp: r1(spreadExact), seniority: tierLabel, is_new: true,
     }]).sort((x, y) => x.spread_bp - y.spread_bp || (x.is_new ? 1 : -1));
 
+    /* 可比集（2026-11-06 v0.3.0）：定价实务里真正拿来对标的是「同结构 + 期限相近」的那几只，
+     * 不是全 13 只的大排名。窗口默认 ±1 年，可用 peer_window_years 调。
+     * 关键事实：本项目 13 只券的期限全部挤在 5.0–6.1 年，所以问 3Y / 8Y 时窗口内必然是空的——
+     * 这时不能假装有可比券，也不能返回空手：退到「同结构里期限最近的那几只」并标明距离。 */
+    let peerWindow = 1;
+    if (a.peer_window_years !== undefined && a.peer_window_years !== null && String(a.peer_window_years).trim() !== '') {
+      peerWindow = Number(a.peer_window_years);
+      if (!isFinite(peerWindow) || peerWindow <= 0 || peerWindow > 10) {
+        return {
+          status: 'invalid_input', field: 'peer_window_years', got: a.peer_window_years,
+          why: 'peer_window_years is the ± tenor window, in years, used to build the comparable set. It must be > 0 and ≤ 10 (default 1).',
+          example: exampleArgs,
+        };
+      }
+    }
+    const sameSen = bonds.filter((b) => b.sen === tierLabel);
+    let peers = sameSen.filter((b) => Math.abs(b.tenor_years - tenor) <= peerWindow + 1e-9);
+    let peerFallback = null;
+    if (!peers.length && sameSen.length) {
+      const dists = sameSen.map((b) => Math.abs(b.tenor_years - tenor));
+      const dmin = Math.min.apply(null, dists);
+      peers = sameSen.filter((b) => Math.abs(Math.abs(b.tenor_years - tenor) - dmin) < 1e-9);
+      peerFallback = {
+        reason: 'no_constituent_within_window',
+        window_years: peerWindow,
+        nearest_distance_years: r2(dmin),
+        note: 'Every constituent of this structure is ' + r2(dmin) + 'y away from your tenor, so nothing sits inside the ±' +
+          peerWindow + 'y window. The rows below are the closest tenor that does exist — read them as a reference, not as a like-for-like comparable, because a different tenor means a different Treasury leg.',
+      };
+    }
+    const peerSorted = peers.slice().sort((x, y) => x.issue_spread_bp - y.issue_spread_bp);
+    const medianOf = (arr) => {
+      if (!arr.length) return null;
+      const v = arr.slice().sort((x, y) => x - y);
+      const mid = Math.floor(v.length / 2);
+      return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+    };
+    const peerMedian = medianOf(peers.map((b) => b.issue_spread_bp));
+    const peerNotional = peers.reduce((s, b) => s + b.size_mm, 0);
+    const peerSet = {
+      criteria: {
+        same_seniority: tierLabel,
+        tenor_window_years: peerWindow,
+        tenor_band_years: [r2(tenor - peerWindow), r2(tenor + peerWindow)],
+      },
+      count: peers.length,
+      bonds: peerSorted.map((b) => ({
+        ticker: b.ticker, issuer: b.issuer, coupon_pct: b.coupon, maturity: b.maturity,
+        tenor_years: b.tenor_years, seniority: b.sen, priced: b.pricing,
+        spread_bp: b.issue_spread_bp, delta_vs_new_bp: r1(b.issue_spread_bp - spreadExact),
+      })),
+      median_bp: peerMedian === null ? null : r1(peerMedian),
+      weighted_bp: peerNotional > 0 ? r1(peers.reduce((s, b) => s + b.size_mm * b.issue_spread_bp, 0) / peerNotional) : null,
+      range_bp: peers.length
+        ? { min: peerSorted[0].issue_spread_bp, max: peerSorted[peerSorted.length - 1].issue_spread_bp }
+        : null,
+      rank_in_set: peers.length
+        ? { position: peers.filter((b) => b.issue_spread_bp < spreadExact - EPS).length + 1, of: peers.length }
+        : null,
+      fallback: peerFallback,
+      note: peers.length
+        ? 'The comparable set is the tightest like-for-like read on this page: same structure, tenor within ±' + peerWindow +
+          'y. Every spread here is measured against the Treasury curve of its own pricing date, so it is a pricing reference, not a live market quote.'
+        : 'No constituent shares this structure at all, so there is no comparable set.',
+    };
+
     /* 发行人历史定价（2026-11-06 v0.2.9）：同一个名字上次发的是什么价——
      * 承销员核对一只新券的第一件事。匹配规则与 ncsx_bond 一致（issuer/ticker 不区分大小写子串）。 */
     let issuerHistory = null;
+
     if (a.issuer !== undefined && a.issuer !== null && String(a.issuer).trim() !== '') {
       const q = String(a.issuer).toLowerCase();
       const hits = bonds.filter((b) =>
@@ -755,6 +823,7 @@ async function callTool(name, args, readJson) {
           : 'No existing constituent sits within 0.05bp of this spread.',
       },
       index_impact: impact,
+      peer_set: peerSet,
       issuer_history: issuerHistory,
       index_impact_note: impact
         ? 'Same face-value weighting as the index itself, and the same arithmetic as the pull_bp attribution in ncsx_events: a positive delta_bp means this bond would pull the index wider.'
