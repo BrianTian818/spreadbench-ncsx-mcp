@@ -30,7 +30,7 @@ Free, no API key, no signup.
 ```bash
 npm install -g github:BrianTian818/spreadbench-ncsx-mcp
 # or, without npm registry:
-npm install -g https://spreadbench.com/download/ncsx-mcp-0.2.1.tgz
+npm install -g https://spreadbench.com/download/ncsx-mcp-0.2.8.tgz
 ```
 
 ```json
@@ -47,7 +47,7 @@ Both transports share one tool definition file (`tools.js`), so they never drift
 
 ## Tools
 
-Eight read-only tools, all keyless. Every tool declares `readOnlyHint: true` / `destructiveHint: false`, so clients do not prompt for write permission.
+Fourteen read-only tools, all keyless. Every tool declares `readOnlyHint: true` / `destructiveHint: false`, so clients do not prompt for write permission.
 
 | Tool | Returns |
 |---|---|
@@ -57,7 +57,13 @@ Eight read-only tools, all keyless. Every tool declares `readOnlyHint: true` / `
 | `ncsx_bond` | **Filtered lookup for one issuer** — matches issuer / ticker / note keyword and returns only matching bonds |
 | `ncsx_curve` | The Treasury par-yield curve used on the pricing date (14 tenors, linear interpolation, no extrapolation) plus recent history |
 | `ncsx_sector` | US high-yield / investment-grade OAS reference series for comparison |
+| `ncsx_filings` | SEC filing radar for 9 AI-infrastructure issuers, last 45 days, noise forms filtered; pricing-chain forms (FWP / 424B* / S-3*) flagged `pricing_signal` |
 | `ncsx_marks` | Second, independent layer: quarterly fair-value marks from SEC Form N-PORT filings, converted to spread |
+| `ncsx_wall` | Maturity wall by year with secured / unsecured split; pass `year` to drill into one cohort |
+| `ncsx_stories` | Citable data stories recomputed live, each with headline numbers, bilingual page and a 1200x630 share card |
+| `ncsx_facts` | 16 quotable numbers, each with `value`, `unit`, `as_of`, a human-readable `calc` and a `source`; filter by `id` or `q` |
+| `ncsx_events` | **History as an event replay.** 13 pricing events in order, level after each, change in bp and per-bond pull attribution (`pull_bp`), so pulls sum to the event delta; filter by `since` or `ticker` |
+| `ncsx_ruler` | **Reverse pricing.** Given a coupon and a tenor: interpolated Treasury (never extrapolated), issuance spread, rank among the 13, gap to the index level and to the same-structure tier, and the index level after adding the bond at a given size. Recomputed on every call — nothing is stored |
 | `ncsx_methodology` | Methodology version, DOI, license, data sources and their licensing status, full formula chain |
 
 Three names from the demo-era server — `ncsx_levels`, `ncsx_attribution`, `ncsx_weekly` — are **not listed** any more, but still answer if an old client calls them: they return a structured retirement notice rather than an error.
@@ -84,6 +90,8 @@ If a tool returns `status: "retired"`, the endpoint was withdrawn — read the `
 - *"Compare NCSX-IS against the US high-yield OAS over the last 90 days."*
 - *"Which Treasury tenors does the index lean on most?"*
 - *"Is the NCSX-IS level consistent with the latest SEC N-PORT marks?"*
+- *"A $1.5bn 5-year note at 8.25% — where does that price relative to this market, and what would it do to NCSX-IS?"*
+- *"How did NCSX-IS get from 517.7bp to 432.3bp, and which issuer pulled it the most?"*
 
 ---
 
