@@ -3,7 +3,7 @@
   "name": "com.spreadbench/ncsx",
   "title": "SpreadBench NCSX-IS — AI Infrastructure Bond Issuance Spread Index",
   "description": "AI-infrastructure bond issuance-spread index (NCSX-IS): secured / unsecured tiers, 13 bonds, 14 read-only MCP tools, free.",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "websiteUrl": "https://spreadbench.com",
   "repository": {
     "url": "https://github.com/BrianTian818/spreadbench-ncsx-mcp",
